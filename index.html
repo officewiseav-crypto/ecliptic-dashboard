@@ -294,13 +294,13 @@
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const SHEET_ID = '2PACX-1vTzal5efODLQkdG7POkoHgWqsNLuaIHH3BJLLOaRREtG_ZifvBAYoZLOa5kckfniA';
+const SHEET_ID_PUB = '2PACX-1vTzal5efODLQkdG7POkoHgWqsNLuaIHH3BJLLOaRREtG_ZifvBAYoZLOa5kckfniA';
 const GIDS = {
-  projetos: '1366599258',
-  resumo:   '1415449430',
+  projetos: '1415449430', // Projetos Investidos (confirmado pelo link de partilha)
+  resumo:   '1217827462', // Resumo VS Investidores
 };
-const csvUrl = gid =>
-  `https://docs.google.com/spreadsheets/d/e/${SHEET_ID}/pub?gid=${gid}&single=true&output=csv`;
+// Usar sempre o ID publicado com /pub — não requer autenticação
+const csvUrl = gid => `https://docs.google.com/spreadsheets/d/e/${SHEET_ID_PUB}/pub?gid=${gid}&single=true&output=csv`;
 
 // ── PALETA ────────────────────────────────────────────────────────────────────
 const PAL = ['#2563eb','#7c3aed','#d97706','#059669','#dc2626','#0891b2',
@@ -355,16 +355,16 @@ const TIP  = {
 // ── MAIN ──────────────────────────────────────────────────────────────────────
 async function init() {
   try {
-    // Carregar CSVs em paralelo — só precisamos de Projetos e Resumo
     const [rowsProj, rowsRes] = await Promise.all([
-      fetchCSV(GIDS.projetos),
-      fetchCSV(GIDS.resumo),
+      fetch(csvUrl(GIDS.projetos)).then(r=>r.text()).then(parseCSV),
+      fetch(csvUrl(GIDS.resumo)).then(r=>r.text()).then(parseCSV),
     ]);
 
     // ── PROJETOS INVESTIDOS ───────────────────────────────────────────────────
-    // Header: linha com "Unique ID"
-    // Colunas: 0=vazio,1=ID,2=Nome,3=Tel,4=Email,5=Projeto,6=CapTotal,
-    //          7=%Assoc,8=DataCAEP,9=Participação,10=%Inv,11=Entregue,12=Falta,19=Estado
+    // Estrutura confirmada (Link A):
+    // col0=vazio, col1=ID, col2=Nome, col3=Tel, col4=Email, col5=NomeProjeto,
+    // col6=CapTotal, col7=%Assoc, col8=DataCAEP, col9=Participação,
+    // col10=%Inv, col11=Entregue, col12=EmFalta, col19=Estado
     const hdrRowProj = rowsProj.findIndex(r => r.some(c => c && c.includes('Unique ID')));
     const linhas = rowsProj.slice(hdrRowProj+1)
       .filter(r => r[1] && r[1].trim().startsWith('INV') && r[5] && r[5].trim())
@@ -378,7 +378,7 @@ async function init() {
         estado:   r[19]?.trim() || 'Ativo',
       }));
 
-    // Projetos únicos (pela ordem que aparecem)
+    // Projetos únicos
     const projSet = [...new Set(linhas.map(l=>l.projeto))].filter(Boolean);
     projSet.forEach((p,i) => PROJ_PAL[p] = PAL[i % PAL.length]);
 
@@ -387,31 +387,24 @@ async function init() {
     projSet.forEach(p => {
       const ls = linhas.filter(l=>l.projeto===p);
       porProj[p] = {
-        total:    ls.reduce((a,l)=>a+l.particip,0),
-        entregue: ls.reduce((a,l)=>a+l.entregue,0),
-        falta:    ls.reduce((a,l)=>a+l.falta,0),
+        total:    ls.reduce((a,l)=>a+l.particip, 0),
+        entregue: ls.reduce((a,l)=>a+l.entregue, 0),
+        falta:    ls.reduce((a,l)=>a+l.falta,    0),
         n:        ls.length,
       };
     });
 
     // ── RESUMO INVESTIDORES ───────────────────────────────────────────────────
-    // Header: linha com "Unique ID"
-    // Colunas: 0=vazio,1=ID,2=Nome,3=nProjetos,4=Total
     const hdrRowRes = rowsRes.findIndex(r => r.some(c => c && c.includes('Unique ID')));
     const investidores = rowsRes.slice(hdrRowRes+1)
       .filter(r => r[1] && r[1].trim().startsWith('INV') && r[2] && r[2].trim())
-      .map(r => ({
-        id:    r[1].trim(),
-        nome:  r[2].trim(),
-        n:     num(r[3]),
-        total: num(r[4]),
-      }))
+      .map(r => ({ id:r[1].trim(), nome:r[2].trim(), n:num(r[3]), total:num(r[4]) }))
       .filter(i => i.total > 0 && i.nome);
 
-    // ── KPIs ──────────────────────────────────────────────────────────────────
+    // ── KPIs calculados dos dados reais ───────────────────────────────────────
     const totalCapital  = investidores.reduce((a,i)=>a+i.total, 0);
     const totalEntregue = linhas.reduce((a,l)=>a+l.entregue, 0);
-    const totalFalta    = linhas.reduce((a,l)=>a+l.falta, 0);
+    const totalFalta    = linhas.reduce((a,l)=>a+l.falta,    0);
     const nInv          = investidores.filter(i=>i.id!=='INV_00').length;
 
     document.getElementById('kpi-inv').textContent      = nInv;
