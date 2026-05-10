@@ -81,7 +81,7 @@
   /* KPIs */
   .kpi-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
   .kpi-card {
-    background:var(--card); border:1px solid var(--border); border-radius:var(--r);
+    background:#ffffff !important; border:1px solid var(--border); border-radius:var(--r);
     padding:20px 18px; position:relative; overflow:hidden;
     transition:transform .16s, box-shadow .16s;
   }
@@ -324,7 +324,10 @@ const num  = s => {
 // ── CSV PARSER ────────────────────────────────────────────────────────────────
 function parseCSV(text) {
   const lines = text.trim().split('\n');
+  // Detectar separador: tab ou vírgula
+  const sep = lines[0] && lines[0].includes('\t') ? '\t' : ',';
   return lines.map(l => {
+    if (sep === '\t') return l.split('\t').map(c => c.trim());
     const cols = []; let cur='', inQ=false;
     for (const ch of l) {
       if (ch==='"') { inQ=!inQ; }
@@ -398,7 +401,11 @@ async function init() {
     const hdrRowRes = rowsRes.findIndex(r => r.some(c => c && c.includes('Unique ID')));
     const investidores = rowsRes.slice(hdrRowRes+1)
       .filter(r => r[1] && r[1].trim().startsWith('INV') && r[2] && r[2].trim())
-      .map(r => ({ id:r[1].trim(), nome:r[2].trim(), n:num(r[3]), total:num(r[4]) }))
+      .map(r => {
+        // col1=ID, col2=Nome, col3=nProjetos, col4=Total (confirmado pelo CSV real)
+        const total = num(r[4]) || num(r[3]);
+        return { id:r[1].trim(), nome:r[2].trim(), n:num(r[3]), total };
+      })
       .filter(i => i.total > 0 && i.nome);
 
     // ── KPIs calculados dos dados reais ───────────────────────────────────────
